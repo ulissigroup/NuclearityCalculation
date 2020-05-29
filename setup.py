@@ -21,5 +21,5 @@ setup(name='drl_nuclearity_calc',
 			'matplotlib',
 			'pymatgen',
 			'pandas',
-			'gaspy @ git+https://github.com/ulissilab/GASpy.git'],
+			'gaspy @ git+https://github.com/ulissigroup/GASpy.git'],
       long_description='''Module for surface nuclearity calculation for any slab''',)
