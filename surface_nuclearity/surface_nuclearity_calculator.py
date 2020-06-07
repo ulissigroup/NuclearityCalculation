@@ -61,7 +61,7 @@ def find_surface_atoms_indices(bulk_cn_dict, atoms):
                 indices_list.append(idx)
     return indices_list
 
-def get_nuclearity_from_atoms(atoms,structure,hosts,actives):
+def get_nuclearity_from_atoms(atoms,structure,actives):
     #Get surface nuclearity from given Atoms object
     slab_atoms = atoms.copy()
     #pick surface atoms
@@ -93,7 +93,7 @@ def get_nuclearity_from_atoms(atoms,structure,hosts,actives):
     list2 = list1.copy()
     for s in list1:
         for q in s:
-            if slab_atoms[q].symbol in hosts:
+            if slab_atoms[q].symbol not in actives:
                 list2.remove(s)
                 break
             if q not in surface_indices:
@@ -110,12 +110,12 @@ def get_nuclearity_from_atoms(atoms,structure,hosts,actives):
         
     return [max_nuclearity,lengths]
 
-def surface_nuclearity_calculator(unitCell_atoms,bulk_structure,hosts,actives):
+def surface_nuclearity_calculator(unitCell_atoms,bulk_structure,actives):
     #Check surface nuclearity for given slab and a repeated slab
     #Identify infinite or semifinite nuclearity cases
     slab_atoms = unitCell_atoms.repeat((2,2,1))
-    slab_nuclearities = get_nuclearity_from_atoms(slab_atoms,bulk_structure,hosts,actives)
-    unitCell_nuclearities = get_nuclearity_from_atoms(unitCell_atoms,bulk_structure,hosts,actives)
+    slab_nuclearities = get_nuclearity_from_atoms(slab_atoms,bulk_structure,actives)
+    unitCell_nuclearities = get_nuclearity_from_atoms(unitCell_atoms,bulk_structure,actives)
     if slab_nuclearities[0] == unitCell_nuclearities[0]:
         surface_nuclearity = slab_nuclearities
     elif slab_nuclearities[0] == 2*unitCell_nuclearities[0]:
