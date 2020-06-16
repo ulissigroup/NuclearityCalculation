@@ -10,6 +10,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.analysis.local_env import VoronoiNN
 from ase import neighborlist
+import ase
 from ase.utils import natural_cutoffs
 from scipy import sparse
 import numpy as np
