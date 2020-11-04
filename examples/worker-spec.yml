@@ -1,0 +1,20 @@
+kind: Pod
+metadata:
+  namespace: dask
+spec:
+  restartPolicy: Never
+  containers:
+  - image: ulissigroup/kubeflow:nuclearity
+    imagePullPolicy: Always
+    args: [dask-worker, --nthreads, '1',--nprocs,'8', --no-dashboard, --memory-limit, 8GB, --death-timeout, '60']
+    name: dask
+    resources:
+      limits:
+        cpu: "8"
+        memory: 16G
+      requests:
+        cpu: "8"
+        memory: 16G
+  imagePullSecrets:
+  - name: ulissigroup-dockerhub
+
