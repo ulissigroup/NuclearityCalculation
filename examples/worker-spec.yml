@@ -8,6 +8,9 @@ spec:
     imagePullPolicy: Always
     args: [dask-worker, --nthreads, '1',--nprocs,'8', --no-dashboard, --memory-limit, 8GB, --death-timeout, '60']
     name: dask
+    env:
+    - name: OMP_NUM_THREADS
+      value: 1
     resources:
       limits:
         cpu: "8"

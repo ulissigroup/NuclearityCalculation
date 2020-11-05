@@ -16,6 +16,15 @@ from scipy import sparse
 import numpy as np
 import networkx as nx
 from ase import Atoms
+from aflow import search,K
+import tqdm
+
+
+def get_initial_aflow_results(nspecies=2,enthalpy_formation_atom=-0.1):
+    result = search(batch_size=10000
+                   ).filter((K.nspecies==nspecies)&(K.enthalpy_formation_atom<enthalpy_formation_atom)
+                           ).select(K.species)
+    return list(tqdm.tqdm(result))
 
 def bulk_nuclearity(b,actives):
     print("working...")
@@ -35,9 +44,10 @@ def bulk_nuclearity(b,actives):
     return [slab_list,slab_atoms_list,nuclearity_list]
 
 def select_bimetallic(r,actives,hosts):
-    if r.species[0] in hosts and r.species[1] in actives:
-        return True
-    elif r.species[1] in hosts and r.species[0] in actives:
+    # remove trailing \n from species
+    species = [a.strip() for a in r.species]
+    if len(actives.intersection(r.species))>0 and \
+       len(hosts.intersection(r.species))>0:
         return True
     else:
         return False

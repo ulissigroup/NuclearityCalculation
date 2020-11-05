@@ -1,28 +1,50 @@
 from dask_kubernetes import KubeCluster
 import dask.bag as db 
-from surface_nuclearity_calculator import bulk_nuclearity, select_bimetallic
-from aflow import search,K
 from joblib import Memory
+from dask.distributed import Client
+import functools
 
-cluster = KubeCluster.from_yaml('worker-spec.yml')
-cluster.adapt(minimum=1, maximum=10)  # or dynamically scale based on current workload
+# Set the up a kube dask cluster
+cluster = KubeCluster.from_yaml('worker-spec.yml', scheduler='remote')
+# cluster.adapt(minimum=0,maximum=10)
+cluster.scale(10)
+client = Client(cluster)
 
-def get_initial_aflow_results(nspecies=2,enthalpy_formation_atom=-0.1):
-    result = search().select(K.nspecies==nspecies).filter(K.enthalpy_formation_atom<enthalpy_formation_atom)
-    return result
+### Code to upload surface_nuclearity code to every worker as they start/restart
+# https://stackoverflow.com/questions/57118226/how-to-properly-use-dasks-upload-file-to-pass-local-code-to-workers
+fname = 'surface_nuclearity_calculator.py'
+with open(fname, 'rb') as f:
+  data = f.read()
+
+def _worker_upload(dask_worker, *, data, fname):
+  dask_worker.loop.add_callback(
+    callback=dask_worker.upload_file,
+    comm=None,  # not used
+    filename=fname,
+    data=data,
+    load=True)
+
+client.register_worker_callbacks(
+  setup=functools.partial(
+    _worker_upload, data=data, fname=fname,
+  )
+)
+
+from surface_nuclearity_calculator import bulk_nuclearity, select_bimetallic,get_initial_aflow_results 
 
 location = './cachedir'
 memory = Memory(location,verbose=1)
 get_initial_aflow_results = memory.cache(get_initial_aflow_results)
-actives = ['Pd', 'Pt', 'Rh', 'Ru', 'Ag', 'Ir','Pd\n', 'Pt\n', 'Rh\n', 'Ru\n', 'Ag\n', 'Ir\n']
-hosts = ['Zn', 'Cd', 'Ga', 'Al', 'In','Zn\n', 'Cd\n', 'Ga\n', 'Al\n', 'In\n']
+actives = set(['Pd', 'Pt', 'Rh', 'Ru', 'Ag', 'Ir'])
+hosts = set(['Zn', 'Cd', 'Ga', 'Al', 'In'])
 
 print("getting intital results")
-all_aflow_binaries = get_initial_aflow_results(enthalpy_formation_atom=-3.1)
-all_aflow_binaries_bag = db.from_sequence(all_aflow_binaries)
-print("applying filter")
-active_inactive_bag = all_aflow_binaries_bag.filter(lambda r: select_bimetallic(r,actives,hosts)>0).map(lambda b: bulk_nuclearity(b,actives)).compute()#.take(2)#joblib later
+all_aflow_binaries = get_initial_aflow_results(enthalpy_formation_atom=-0.1)
+active_inactive_aflow_binaries = list(filter(lambda r: select_bimetallic(r,actives,hosts), all_aflow_binaries))
+
+active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries[0:200])
 print("nuclearity calculation")
-outputs=active_inactive_bag.map(lambda b: bulk_nuclearity(b,actives)).compute()
-outputs=db.from_sequence(bimetallics).map(lambda b: bulk_nuclearity(b,actives)).compute()
+nuclearity_results = active_inactive_aflow_binaries_bag.map(lambda b: bulk_nuclearity(b,actives)).compute()
+
+
 
