@@ -3,6 +3,13 @@ import dask.bag as db
 from joblib import Memory
 from dask.distributed import Client
 import functools
+from dask.cache import Cache
+from dask.diagnostics import ProgressBar
+
+cache = Cache(2e9)  # Leverage two gigabytes of memory
+cache.register()    # Turn cache on globally
+
+ProgressBar().register()
 
 # Set the up a kube dask cluster
 cluster = KubeCluster.from_yaml('worker-spec.yml', scheduler='remote')
