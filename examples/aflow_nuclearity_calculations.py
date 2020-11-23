@@ -47,9 +47,10 @@ hosts = set(['Zn', 'Cd', 'Ga', 'Al', 'In'])
 
 print("getting intital results")
 all_aflow_binaries = get_initial_aflow_results(enthalpy_formation_atom=-0.1)
+print("Total aflow binaries found = ",len(all_aflow_binaries))
 active_inactive_aflow_binaries = list(filter(lambda r: select_bimetallic(r,actives,hosts), all_aflow_binaries))
-
-active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries[0:200])
+print("Number of bimetallics found = ",len(active_inactive_aflow_binaries))
+active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries)
 print("nuclearity calculation")
 nuclearity_results = active_inactive_aflow_binaries_bag.map(lambda b: bulk_nuclearity(b,actives)).compute()
 
