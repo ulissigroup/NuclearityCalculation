@@ -16,7 +16,7 @@ spec:
         cpu: "8"
         memory: 16G
       requests:
-        cpu: "8"
+        cpu: "2"
         memory: 16G
   imagePullSecrets:
   - name: ulissigroup-dockerhub
