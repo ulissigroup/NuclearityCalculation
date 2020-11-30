@@ -9,13 +9,10 @@ from dask.cache import Cache
 from dask.distributed import progress
 from pymatgen.io.ase import AseAtomsAdaptor
 
-cache = Cache(2e9)  # Leverage two gigabytes of memory
-cache.register()    # Turn cache on globally
-
 # Set the up a kube dask cluster
 cluster = KubeCluster.from_yaml('worker-spec.yml', scheduler='remote')
-# cluster.adapt(minimum=0,maximum=10)
-cluster.scale(20)
+cluster.adapt(minimum=0,maximum=10)
+#cluster.scale(20)
 client = Client(cluster)
 
 ### Code to upload surface_nuclearity code to every worker as they start/restart
@@ -63,13 +60,13 @@ active_inactive_aflow_binaries = list(filter(lambda r: select_bimetallic(r,activ
 print("Number of bimetallics found = ",len(active_inactive_aflow_binaries))
 active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries[0:2])
 print("structure generation")
-all_structures = active_inactive_aflow_binaries_bag.map(lambda b: AseAtomsAdaptor.get_structure(b.atoms(pattern='CONTCAR.relax*', quippy=False, keywords=None, calculator=None))).compute()
+all_structures = active_inactive_aflow_binaries_bag.map(lambda b: AseAtomsAdaptor.get_structure(b.atoms(pattern='CONTCAR.relax*', quippy=False, keywords=None, calculator=None))).persist()
 print("slab enumeration")
-all_slabs_list = db.from_sequence(all_structures).map(lambda struc: slab_enumeration(struc)).compute()
+all_slabs_list = db.from_sequence(all_structures).map(lambda struc: slab_enumeration(struc)).persist()
 print("masterlist assignment")
 masterlist=[]
 for i in range(0,len(all_structures)):
     for slab in all_slabs_list[i]:
         masterlist.append([active_inactive_aflow_binaries[i],all_structures[i],slab])
 print("nuclearity calculations")
-nuclearity_results = db.from_sequence(masterlist).map(lambda master: slab_nuclearity(master,actives)).compute()
+nuclearity_results = db.from_sequence(masterlist).map(lambda master: slab_nuclearity(master,actives)).persist()
