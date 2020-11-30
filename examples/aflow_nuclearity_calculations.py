@@ -11,7 +11,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 
 # Set the up a kube dask cluster
 cluster = KubeCluster.from_yaml('worker-spec.yml', scheduler='remote')
-cluster.adapt(minimum=0,maximum=10)
+cluster.adapt(minimum=0,maximum=2)
 #cluster.scale(20)
 client = Client(cluster)
 
@@ -37,15 +37,23 @@ client.register_worker_callbacks(
 
 
 def slab_nuclearity(master,actives):
-    [b,structure,slab] = master
+    b = master['active_inactive']
+    structure = master['bulk_structure']
+    slab = master['slab']
+
     for i in range(0,len(b.species)):
         if b.species[i] in actives:
             x_active = b.stoich[i]
+    
     unitCell_atoms = AseAtomsAdaptor.get_atoms(slab)
     nuclearity_result = surface_nuclearity_calculator(unitCell_atoms,structure,list(actives))
     slab_atoms=unitCell_atoms
     nuclearity=[b.compound,b.auid,slab.miller_index,slab.shift,nuclearity_result[0],nuclearity_result[1],x_active]
-    return [slab,slab_atoms,nuclearity]
+    
+    return {'slab':slab,
+            'slab_atoms':slab_atoms,
+            'nuclearity':nuclearity}
+
 
 location = './cachedir'
 memory = Memory(location,verbose=1)
@@ -60,13 +68,8 @@ active_inactive_aflow_binaries = list(filter(lambda r: select_bimetallic(r,activ
 print("Number of bimetallics found = ",len(active_inactive_aflow_binaries))
 active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries[0:2])
 print("structure generation")
-all_structures = active_inactive_aflow_binaries_bag.map(lambda b: AseAtomsAdaptor.get_structure(b.atoms(pattern='CONTCAR.relax*', quippy=False, keywords=None, calculator=None))).persist()
+all_structures = active_inactive_aflow_binaries_bag.map(lambda b: AseAtomsAdaptor.get_structure(b.atoms(pattern='CONTCAR.relax*', quippy=False, keywords=None, calculator=None)))
 print("slab enumeration")
-all_slabs_list = db.from_sequence(all_structures).map(lambda struc: slab_enumeration(struc)).persist()
-print("masterlist assignment")
-masterlist=[]
-for i in range(0,len(all_structures)):
-    for slab in all_slabs_list[i]:
-        masterlist.append([active_inactive_aflow_binaries[i],all_structures[i],slab])
+all_slabs_list = all_structures.map(slab_enumeration, active_inactive_aflow_binaries_bag)
 print("nuclearity calculations")
-nuclearity_results = db.from_sequence(masterlist).map(lambda master: slab_nuclearity(master,actives)).persist()
+nuclearity_results = all_slabs_list.flatten().map(lambda master: slab_nuclearity(master,actives)).compute()

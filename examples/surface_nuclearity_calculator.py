@@ -52,13 +52,17 @@ def select_bimetallic(r,actives,hosts):
     else:
         return False
 
-def slab_enumeration(bulk_structure):
+
+def slab_enumeration(bulk_structure, active_inactive):
     all_slabs = generate_all_slabs(bulk_structure,2,10,20,
                                bonds=None, tol=0.1, ftol=0.1, max_broken_bonds=0,
                                lll_reduce=False, center_slab=False, primitive=True,
                                max_normal_search=None, symmetrize=False, repair=False,
                                include_reconstructions=False, in_unit_planes=False)
-    return all_slabs
+    return [{'slab': slab,
+             'bulk_structure': bulk_structure,
+            'active_inactive': active_inactive} for slab in all_slabs]
+             
 
 def find_bulk_cn_dict(bulk_atoms):
     struct = AseAtomsAdaptor.get_structure(bulk_atoms)
