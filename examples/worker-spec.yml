@@ -6,7 +6,7 @@ spec:
   containers:
   - image: ulissigroup/kubeflow:nuclearity
     imagePullPolicy: Always
-    args: [dask-worker, --nthreads, '1',--nprocs,'8', --no-dashboard, --memory-limit, 8GB, --death-timeout, '60']
+    args: [dask-worker, --nthreads, '8',--nprocs,'1', --no-dashboard, --memory-limit, 16GB, --death-timeout, '60']
     name: dask
     env:
     - name: OMP_NUM_THREADS
