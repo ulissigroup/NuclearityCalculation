@@ -9,7 +9,7 @@ from scipy.spatial.qhull import QhullError
 from ase import Atoms
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.analysis.local_env import VoronoiNN
+from pymatgen.analysis.local_env import VoronoiNN, JmolNN
 from ase import neighborlist
 from ase.neighborlist import natural_cutoffs
 from scipy import sparse
@@ -18,7 +18,9 @@ import networkx as nx
 from ase import Atoms
 from aflow import search,K
 import tqdm
-
+from scipy.sparse.csgraph import connected_components
+import graph_tool as gt
+from graph_tool import topology
 
 def get_initial_aflow_results(nspecies=2,enthalpy_formation_atom=-0.1):
     result = search(batch_size=10000
@@ -40,7 +42,13 @@ def bulk_nuclearity(b,actives):
         unitCell_atoms = AseAtomsAdaptor.get_atoms(slab)
         nuclearity_result = surface_nuclearity_calculator(unitCell_atoms,structure,list(actives))
         slab_atoms_list.append(unitCell_atoms)
-        nuclearity_list.append([b.compound,b.auid,slab.miller_index,slab.shift,nuclearity_result[0],nuclearity_result[1],x_active])
+        nuclearity_list.append([b.compound,
+                                b.auid,
+                                slab.miller_index,
+                                slab.shift,
+                                nuclearity_result['nuclearity'],
+                                nuclearity_result['nuclearities'],
+                                x_active])
     return [slab_list,slab_atoms_list,nuclearity_list]
 
 def select_bimetallic(r,actives,hosts):
@@ -62,7 +70,6 @@ def slab_enumeration(bulk_structure, active_inactive):
     return [{'slab': slab,
              'bulk_structure': bulk_structure,
             'active_inactive': active_inactive} for slab in all_slabs]
-             
 
 def find_bulk_cn_dict(bulk_atoms):
     struct = AseAtomsAdaptor.get_structure(bulk_atoms)
@@ -88,16 +95,18 @@ def find_bulk_cn_dict(bulk_atoms):
 
 def find_surface_atoms_indices(bulk_cn_dict, atoms):
     struct = AseAtomsAdaptor.get_structure(atoms, cls = None)
-    voronoi_nn = VoronoiNN()
+    nn_analyzer = JmolNN()
+
     # Identify index of the surface atoms
     indices_list = []
     weights = [site.species.weight for site in struct]
     center_of_mass = np.average(struct.frac_coords,
                                 weights=weights, axis=0)
+
     for idx, site in enumerate(struct):
         if site.frac_coords[2] > center_of_mass[2]:
             try:
-                cn = voronoi_nn.get_cn(struct, idx, use_weights=True)
+                cn = nn_analyzer.get_cn(struct, idx, use_weights=True)
                 cn = float('%.5f' % (round(cn, 5)))
                 # surface atoms are undercoordinated
                 if cn < min(bulk_cn_dict[site.species_string]):
@@ -107,6 +116,7 @@ def find_surface_atoms_indices(bulk_cn_dict, atoms):
                 # indicating a surface site
                 indices_list.append(idx)
     return indices_list
+
 
 def get_nuclearity_from_atoms(atoms,structure,actives):
     #Get surface nuclearity from given Atoms object
@@ -118,59 +128,56 @@ def get_nuclearity_from_atoms(atoms,structure,actives):
 
     #Generate connectivity matrix
     cutOff = natural_cutoffs(slab_atoms)
-    neighborList = neighborlist.NeighborList(cutOff, self_interaction=False, 
+    neighborList = neighborlist.NeighborList(cutOff,
+                                             self_interaction=False,
                                              bothways=True)
     neighborList.update(slab_atoms)
-    connectivity_matrix = neighborList.get_connectivity_matrix()    
+    connectivity_matrix = neighborList.get_connectivity_matrix()
 
     #Ignore connectivity with atoms which are not active or on the surface
     active_connectivity_matrix = connectivity_matrix.copy()
-    for atom in slab_atoms:
-        if atom.symbol not in actives:
-            active_connectivity_matrix[atom.index,:] = 0
-            active_connectivity_matrix[:,atom.index] = 0
-        if atom.index not in surface_indices:
-            active_connectivity_matrix[atom.index,:] = 0
-            active_connectivity_matrix[:,atom.index] = 0            
-    graph = nx.from_scipy_sparse_matrix(active_connectivity_matrix)
+    active_list = [atom.symbol in actives and atom.index in surface_indices for atom in slab_atoms]
 
-    #Remove host atoms which are showing up as single atom components
-    lengths = []
-    list1 = list(nx.connected_components(graph))
-    list2 = list1.copy()
-    for s in list1:
-        for q in s:
-            if slab_atoms[q].symbol not in actives:
-                list2.remove(s)
-                break
-            if q not in surface_indices:
-                list2.remove(s)
-                break
-            
-    #Get list of nuclearities of all active sites on surface
-    for l in list2:
-        lengths.append(len(l))
-    if len(lengths) == 0:
-        max_nuclearity = 0
+    if sum(active_list) == 0:
+        # No active surface atoms!
+        return {'max_nuclearity': 0,
+                'nuclearities': []}
+
     else:
-        max_nuclearity = max(lengths)
-        
-    return [max_nuclearity,lengths]
+        active_connectivity_matrix = active_connectivity_matrix[active_list, :]
+        active_connectivity_matrix = active_connectivity_matrix[:, active_list]
+
+        # Make a graph-tool graph from the adjacency matrix
+        graph = gt.Graph(directed=False)
+
+        for i in range(active_connectivity_matrix.shape[0]):
+            graph.add_vertex()
+
+        graph.add_edge_list(np.transpose(active_connectivity_matrix.nonzero()))
+
+        labels, hist = topology.label_components(graph, directed=False)
+
+        return {'max_nuclearity': np.max(hist),
+                'nuclearities': hist}
 
 def surface_nuclearity_calculator(unitCell_atoms,bulk_structure,actives):
     #Check surface nuclearity for given slab and a repeated slab
     #Identify infinite or semifinite nuclearity cases
-    slab_atoms = unitCell_atoms.repeat((2,2,1))
-    slab_nuclearities = get_nuclearity_from_atoms(slab_atoms,bulk_structure,actives)
-    unitCell_nuclearities = get_nuclearity_from_atoms(unitCell_atoms,bulk_structure,actives)
-    if slab_nuclearities[0] == unitCell_nuclearities[0]:
-        surface_nuclearity = slab_nuclearities
-    elif slab_nuclearities[0] == 2*unitCell_nuclearities[0]:
-        surface_nuclearity = ['semi-finite',slab_nuclearities[1]]
-    elif slab_nuclearities[0] == 4*unitCell_nuclearities[0]:
-        surface_nuclearity = ['infinite',slab_nuclearities[1]]
+    replicated_atoms = unitCell_atoms.repeat((2,2,1))
+    replicated_nuclearities = get_nuclearity_from_atoms(replicated_atoms,bulk_structure,actives)
+    base_nuclearities = get_nuclearity_from_atoms(unitCell_atoms,bulk_structure,actives)
+
+    if replicated_nuclearities['max_nuclearity'] == base_nuclearities['max_nuclearity']:
+        return {'nuclearity': replicated_nuclearities['max_nuclearity'],
+                'nuclearities': base_nuclearities['nuclearities']}
+    elif replicated_nuclearities['max_nuclearity'] == 2*base_nuclearities['max_nuclearity']:
+        return {'nuclearity': 'semi-finite',
+                'nuclearities': base_nuclearities['nuclearities']}
+    elif replicated_nuclearities['max_nuclearity'] == 4*base_nuclearities['max_nuclearity']:
+        return {'nuclearity': 'infinite',
+                'nuclearities': base_nuclearities['nuclearities']}
     else:
-        surface_nuclearity = [{'unitCell': unitCell_nuclearities[0], 
-                               'slab': slab_nuclearities[0]},
-                              slab_nuclearities[1]]
-    return (surface_nuclearity)
+        return {'nuclearity':'somewhat-infinte',
+                'base_nuclearities': base_nuclearities['nuclearities'],
+                'replicated_nuclearities': replicated_nuclearities['nuclearities'],
+                'nuclearities': base_nuclearities['nuclearities']}

@@ -1,5 +1,5 @@
 from dask_kubernetes import KubeCluster
-import dask.bag as db 
+import dask.bag as db
 from joblib import Memory
 from dask.distributed import Client
 import functools
@@ -13,7 +13,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 cluster = KubeCluster.from_yaml('worker-spec.yml')
 
 # Adapt seems to be having problems, used fixed scaling
-cluster.scale(3)
+cluster.scale(8)
 client = Client(cluster)
 
 ### Code to upload surface_nuclearity code to every worker as they start/restart
@@ -45,12 +45,17 @@ def slab_nuclearity(master,actives):
     for i in range(0,len(b.species)):
         if b.species[i] in actives:
             x_active = b.stoich[i]
-    
+
     unitCell_atoms = AseAtomsAdaptor.get_atoms(slab)
     nuclearity_result = surface_nuclearity_calculator(unitCell_atoms,structure,list(actives))
     slab_atoms=unitCell_atoms
-    nuclearity=[b.compound,b.auid,slab.miller_index,slab.shift,nuclearity_result[0],nuclearity_result[1],x_active]
-    
+    nuclearity = [b.compound,
+                                b.auid,
+                                slab.miller_index,
+                                slab.shift,
+                                nuclearity_result['nuclearity'],
+                                nuclearity_result['nuclearities'],
+                                x_active]
     return {'slab':slab,
             'slab_atoms':slab_atoms,
             'nuclearity':nuclearity}
@@ -64,17 +69,16 @@ hosts = set(['Zn', 'Cd', 'Ga', 'Al', 'In'])
 print("getting intital results")
 all_aflow_binaries = get_initial_aflow_results(enthalpy_formation_atom=-0.1)
 print("Total aflow binaries found = ",len(all_aflow_binaries))
-active_inactive_aflow_binaries = list(filter(lambda r: select_bimetallic(r,actives,hosts), all_aflow_binaries))[:1]
+active_inactive_aflow_binaries = list(filter(lambda r: select_bimetallic(r,actives,hosts), all_aflow_binaries))[:100]
 print("Number of bimetallics found = ",len(active_inactive_aflow_binaries))
-
 active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries)
 print("structure generation")
 all_structures = active_inactive_aflow_binaries_bag.map(lambda b: AseAtomsAdaptor.get_structure(b.atoms(pattern='CONTCAR.relax*', quippy=False, keywords=None, calculator=None)))
 print("slab enumeration")
-all_slabs_list = all_structures.map(slab_enumeration, active_inactive_aflow_binaries_bag).persist()
-all_slabs_list = all_slabs_list.flatten().persist()
+all_slabs_list = all_structures.map(slab_enumeration, active_inactive_aflow_binaries_bag)
+all_slabs_list = all_slabs_list.flatten().repartition(npartitions=1000)
 print("nuclearity calculations")
 nuclearity_results = all_slabs_list.map(slab_nuclearity,actives).persist()
 
 progress(nuclearity_results)
-nuclearity_results.compute()
+
