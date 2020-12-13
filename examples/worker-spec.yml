@@ -20,10 +20,10 @@ spec:
         memory: 32G
     volumeMounts:
     - mountPath: /home/jovyan
-      name: workspace-zulissi
+      name: dask-cache
       subPath: dask-temp
   volumes:
-  - name: workspace-zulissi
+  - name: dask-cache
     persistentVolumeClaim:
       claimName: workspace-zulissi
       
