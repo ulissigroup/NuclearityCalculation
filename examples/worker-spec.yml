@@ -10,7 +10,7 @@ spec:
     name: dask
     env:
     - name: OMP_NUM_THREADS
-      value: 1
+      value: 2
     resources:
       limits:
         cpu: "8"
@@ -18,6 +18,12 @@ spec:
       requests:
         cpu: "2"
         memory: 32G
-  imagePullSecrets:
-  - name: ulissigroup-dockerhub
-
+    volumeMounts:
+    - mountPath: /home/jovyan
+      name: workspace-zulissi
+      subPath: dask-temp
+  volumes:
+  - name: workspace-zulissi
+    persistentVolumeClaim:
+      claimName: workspace-zulissi
+      
