@@ -3,7 +3,7 @@ import dask.bag as db
 from joblib import Memory
 from dask.distributed import Client
 import functools
-from surface_nuclearity_calculator import bulk_nuclearity, select_bimetallic,get_initial_aflow_results, aflow_object_to_atoms
+from aflow_support_file import bulk_nuclearity, select_bimetallic,get_initial_aflow_results, aflow_object_to_atoms
 from surface_nuclearity_calculator import slab_enumeration,surface_nuclearity_calculator
 from dask.distributed import progress
 from pymatgen.io.ase import AseAtomsAdaptor
@@ -75,7 +75,7 @@ print("Total aflow binaries found = ",len(all_aflow_binaries))
 
 # Find all of the active/inactive combinations
 active_inactive_aflow_binaries = list(filter(lambda r: select_bimetallic(r,actives,hosts), 
-                                             all_aflow_binaries))[:700] # There is a problematic AlPd structure that stops this from going over 700
+                                             all_aflow_binaries)) # There is a problematic AlPd structure that stops this from going over 700
 print("Number of active/inactive bimetallic structures found = ",len(active_inactive_aflow_binaries))
 
 # Load all of the bulks into a dask bag, and get the atoms objects from aflowlib

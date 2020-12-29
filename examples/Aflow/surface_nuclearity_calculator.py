@@ -22,43 +22,6 @@ from scipy.sparse.csgraph import connected_components
 import graph_tool as gt
 from graph_tool import topology
 
-def get_initial_aflow_results(nspecies=2,enthalpy_formation_atom=-0.1):
-    result = search(batch_size=10000
-                   ).filter((K.nspecies==nspecies)&(K.enthalpy_formation_atom<enthalpy_formation_atom)
-                           ).select(K.species,K.stoich,K.compound,K.auid)
-    return list(tqdm.tqdm(result))
-
-def bulk_nuclearity(b,actives):
-    print("working...")
-    bulk_atoms = b.atoms(pattern='CONTCAR.relax*', quippy=False, keywords=None, calculator=None)
-    structure = AseAtomsAdaptor.get_structure(bulk_atoms)
-    slab_list=slab_enumeration(structure)
-    slab_atoms_list = []
-    nuclearity_list = []
-    for i in range(0,len(b.species)):
-        if b.species[i] in actives:
-            x_active = b.stoich[i]
-    for slab in slab_list:
-        unitCell_atoms = AseAtomsAdaptor.get_atoms(slab)
-        nuclearity_result = surface_nuclearity_calculator(unitCell_atoms,structure,list(actives))
-        slab_atoms_list.append(unitCell_atoms)
-        nuclearity_list.append([b.compound,
-                                b.auid,
-                                slab.miller_index,
-                                slab.shift,
-                                nuclearity_result['nuclearity'],
-                                nuclearity_result['nuclearities'],
-                                x_active])
-    return [slab_list,slab_atoms_list,nuclearity_list]
-
-def select_bimetallic(r,actives,hosts):
-    # remove trailing \n from species
-    species = [a.strip() for a in r.species]
-    if len(actives.intersection(r.species))>0 and \
-       len(hosts.intersection(r.species))>0:
-        return True
-    else:
-        return False
 
 
 def slab_enumeration(bulk_structure, active_inactive):
