@@ -3,7 +3,7 @@ import dask.bag as db
 from joblib import Memory
 from dask.distributed import Client
 import functools
-from aflow_support_file import bulk_nuclearity, select_bimetallic,get_initial_aflow_results, aflow_object_to_atoms
+from aflow_support_file import slab_nuclearity, select_bimetallic,get_initial_aflow_results, aflow_object_to_atoms
 from surface_nuclearity_calculator import slab_enumeration,surface_nuclearity_calculator
 from dask.distributed import progress
 from pymatgen.io.ase import AseAtomsAdaptor
@@ -36,33 +36,6 @@ for fname in fname_:
             )
         )
 
-def slab_nuclearity(master,actives):
-    try:
-        b = master['bulk']
-        structure = master['bulk_structure']
-        slab = master['slab']
-    except:
-        b = master[0]['bulk']
-        structure = master[0]['bulk_structure']
-        slab = master[0]['slab']
-
-    for i in range(0,len(b.species)):
-        if b.species[i] in actives:
-            x_active = b.stoich[i]
-
-    unitCell_atoms = AseAtomsAdaptor.get_atoms(slab)
-    nuclearity_result = surface_nuclearity_calculator(unitCell_atoms,structure,list(actives))
-    slab_atoms=unitCell_atoms
-    nuclearity = [b.compound,
-                                b.auid,
-                                slab.miller_index,
-                                slab.shift,
-                                nuclearity_result['nuclearity'],
-                                nuclearity_result['nuclearities'],
-                                x_active]
-    return {'slab':slab,
-            'slab_atoms':slab_atoms,
-            'nuclearity':nuclearity}
 
 # Set up the cache directory - this will also be the local directory on each worker that will store cached results
 location = './cachedir'
