@@ -85,15 +85,15 @@ print("Number of active/inactive bimetallic structures found = ",len(active_inac
 # Load all of the bulks into a dask bag, and get the atoms objects from aflowlib
 active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries, 
                                                       npartitions=len(active_inactive_aflow_binaries))
-all_structures = active_inactive_aflow_binaries_bag.map(aflow_object_to_atoms)
+all_structures = active_inactive_aflow_binaries_bag.map(memory.cache(aflow_object_to_atoms))
 
 # Enumerate all of the slabs, and repartition into 10k chunks of surfaces to work on
-all_slabs_list = all_structures.map(slab_enumeration, 
+all_slabs_list = all_structures.map(memory.cache(slab_enumeration), 
                                     active_inactive_aflow_binaries_bag)
 all_slabs_list = all_slabs_list.flatten().repartition(npartitions=10000)
 
 # Run the nuclearity calculation on all of the slabs
-nuclearity_results = all_slabs_list.map(slab_nuclearity,actives)
+nuclearity_results = all_slabs_list.map(memory.cache(slab_nuclearity),actives)
 
 # Compute!
 nuclearity_results = nuclearity_results.persist()
