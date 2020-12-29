@@ -6,7 +6,7 @@ spec:
   containers:
   - image: ulissigroup/kubeflow:nuclearity
     imagePullPolicy: Always
-    args: [dask-worker, --nthreads, '1',--nprocs,'8', --no-dashboard, --memory-limit,'4e9',--death-timeout, '60']
+    args: [dask-worker, --nthreads, '8',--nprocs,'1', --no-dashboard, --memory-limit,16GB,--death-timeout, '60']
     name: dask
     env:
     - name: OMP_NUM_THREADS
@@ -14,10 +14,10 @@ spec:
     resources:
       limits:
         cpu: "8"
-        memory: 32G
+        memory: 16G
       requests:
-        cpu: "2"
-        memory: 32G
+        cpu: "8"
+        memory: 16G
     volumeMounts:
     - mountPath: /home/jovyan
       name: dask-cache
@@ -25,5 +25,5 @@ spec:
   volumes:
   - name: dask-cache
     persistentVolumeClaim:
-      claimName: workspace-zulissi
+      claimName: workspace-usharma
       

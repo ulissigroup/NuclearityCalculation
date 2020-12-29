@@ -13,34 +13,38 @@ import dask
 cluster = KubeCluster.from_yaml('worker-spec.yml')
 
 # Adapt seems to be having problems, used fixed scaling
-cluster.scale(40)
+cluster.scale(2)
 client = Client(cluster)
 
-### Code to upload surface_nuclearity code to every worker as they start/restart
-# https://stackoverflow.com/questions/57118226/how-to-properly-use-dasks-upload-file-to-pass-local-code-to-workers
-fname = 'surface_nuclearity_calculator.py'
-with open(fname, 'rb') as f:
-  data = f.read()
-
 def _worker_upload(dask_worker, *, data, fname):
-  dask_worker.loop.add_callback(
+    dask_worker.loop.add_callback(
     callback=dask_worker.upload_file,
     comm=None,  # not used
     filename=fname,
     data=data,
     load=True)
 
-client.register_worker_callbacks(
-  setup=functools.partial(
-    _worker_upload, data=data, fname=fname,
-  )
-)
-
+### Code to upload surface_nuclearity code to every worker as they start/restart
+# https://stackoverflow.com/questions/57118226/how-to-properly-use-dasks-upload-file-to-pass-local-code-to-workers
+fname_ = ['surface_nuclearity_calculator.py','aflow_support_file.py']
+for fname in fname_:
+    with open(fname, 'rb') as f:
+        data = f.read()
+        client.register_worker_callbacks(
+            setup=functools.partial(
+                _worker_upload, data=data, fname=fname,
+            )
+        )
 
 def slab_nuclearity(master,actives):
-    b = master['active_inactive']
-    structure = master['bulk_structure']
-    slab = master['slab']
+    try:
+        b = master['bulk']
+        structure = master['bulk_structure']
+        slab = master['slab']
+    except:
+        b = master[0]['bulk']
+        structure = master[0]['bulk_structure']
+        slab = master[0]['slab']
 
     for i in range(0,len(b.species)):
         if b.species[i] in actives:
@@ -81,15 +85,16 @@ print("Number of active/inactive bimetallic structures found = ",len(active_inac
 # Load all of the bulks into a dask bag, and get the atoms objects from aflowlib
 active_inactive_aflow_binaries_bag = db.from_sequence(active_inactive_aflow_binaries, 
                                                       npartitions=len(active_inactive_aflow_binaries))
-all_structures = active_inactive_aflow_binaries_bag.map(memory.cache(aflow_object_to_atoms))
+all_structures = active_inactive_aflow_binaries_bag.map(aflow_object_to_atoms)
 
 # Enumerate all of the slabs, and repartition into 10k chunks of surfaces to work on
-all_slabs_list = all_structures.map(memory.cache(slab_enumeration), 
+all_slabs_list = all_structures.map(slab_enumeration, 
                                     active_inactive_aflow_binaries_bag)
 all_slabs_list = all_slabs_list.flatten().repartition(npartitions=10000)
 
 # Run the nuclearity calculation on all of the slabs
-nuclearity_results = all_slabs_list.map(memory.cache(slab_nuclearity),actives)
+nuclearity_results = all_slabs_list.map(slab_nuclearity,actives)
 
 # Compute!
-nuclearity_results = nuclearity_results.compute()
+nuclearity_results = nuclearity_results.persist()
+progress(nuclearity_results)

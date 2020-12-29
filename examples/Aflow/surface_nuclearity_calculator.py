@@ -22,9 +22,7 @@ from scipy.sparse.csgraph import connected_components
 import graph_tool as gt
 from graph_tool import topology
 
-
-
-def slab_enumeration(bulk_structure, active_inactive):
+def slab_enumeration(bulk_structure, bulk):
     all_slabs = generate_all_slabs(bulk_structure,2,10,20,
                                bonds=None, tol=0.1, ftol=0.1, max_broken_bonds=0,
                                lll_reduce=False, center_slab=False, primitive=True,
@@ -32,7 +30,8 @@ def slab_enumeration(bulk_structure, active_inactive):
                                include_reconstructions=False, in_unit_planes=False)
     return [{'slab': slab,
              'bulk_structure': bulk_structure,
-            'active_inactive': active_inactive} for slab in all_slabs]
+            'bulk': bulk} for slab in all_slabs]
+
 
 def find_bulk_cn_dict(bulk_atoms):
     struct = AseAtomsAdaptor.get_structure(bulk_atoms)
@@ -123,6 +122,7 @@ def get_nuclearity_from_atoms(atoms,structure,actives):
         return {'max_nuclearity': np.max(hist),
                 'nuclearities': hist}
 
+
 def surface_nuclearity_calculator(unitCell_atoms,bulk_structure,actives):
     #Check surface nuclearity for given slab and a repeated slab
     #Identify infinite or semifinite nuclearity cases
@@ -140,7 +140,30 @@ def surface_nuclearity_calculator(unitCell_atoms,bulk_structure,actives):
         return {'nuclearity': 'infinite',
                 'nuclearities': base_nuclearities['nuclearities']}
     else:
-        return {'nuclearity':'somewhat-infinte',
+        return {'nuclearity':'somewhat-infinite',
                 'base_nuclearities': base_nuclearities['nuclearities'],
                 'replicated_nuclearities': replicated_nuclearities['nuclearities'],
                 'nuclearities': base_nuclearities['nuclearities']}
+
+def nuclearity_all_slabs_in_bulk(bulk,bulk_structure,actives):
+  #slab enumeration
+  if bulk_structure == None:
+    bulk_structure = get_bulk_structure_from_entry(bulk)
+
+  all_slabs_list = slab_enumeration(bulk_structure)
+
+  #nuclearity calculation loop
+  nuclearity_result = [surface_nuclearity_calculator(AseAtomsAdaptor.get_atoms(slab['slab']), bulk_structure,actives) for slab in all_slabs_list]
+  return nuclearity_result
+
+def get_bulk_structure_from_entry(bulk):
+  #Assuming that the bulk belongs to Materials Project or Aflowlib
+  try:
+    with MPRester("MGOdX3P4nI18eKvE") as mpr:
+      bulk_structure = mpr.get_structure_by_material_id(bulk['material_id'],
+                                                        final=True, 
+                                                        conventional_unit_cell
+                                                        =True)
+  except:
+    bulk_structure = AseAtomsAdaptor.get_structure(bulk.atoms(pattern='CONTCAR.relax*', quippy=False, keywords=None, calculator=None))
+  return bulk_structure
