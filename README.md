@@ -1,2 +1,2 @@
 # NuclearityCalculation
-Functions for surface nuclearity calculations given an Atoms object for a slab.
+The Surface Nuclearity Calculator contains functions to calculate nuclearity for a given slab, or for all slabs in a given bulk. It also contains some support functions for dealing with the various object types (Atoms, Slab, Structure, entry etc).
